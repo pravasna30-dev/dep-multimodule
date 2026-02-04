@@ -4,29 +4,40 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Service for managing users.
- * API Version: 1.0.0
+ * API Version: 2.0.0
+ *
+ * BREAKING CHANGES from 1.0.0:
+ * - findById() now takes String (UUID) instead of Long
+ * - findById() now returns Optional<User> instead of User
  */
 public class UserService {
 
-    private final Map<Long, User> users = new HashMap<>();
+    private final Map<String, User> users = new HashMap<>();
 
     public UserService() {
-        // Seed with sample data
-        users.put(1L, new User(1L, "john.doe@example.com", "John Doe"));
-        users.put(2L, new User(2L, "jane.doe@example.com", "Jane Doe"));
+        // v2.0: IDs are now UUIDs (String)
+        users.put("550e8400-e29b-41d4-a716-446655440001",
+                new User("550e8400-e29b-41d4-a716-446655440001", "john.doe@example.com", "John Doe"));
+        users.put("550e8400-e29b-41d4-a716-446655440002",
+                new User("550e8400-e29b-41d4-a716-446655440002", "jane.doe@example.com", "Jane Doe"));
     }
 
     /**
-     * Find a user by their numeric ID.
+     * Find a user by their UUID.
      *
-     * @param userId the user's numeric ID
-     * @return the User object, or null if not found
+     * BREAKING CHANGE: Parameter changed from Long to String
+     * BREAKING CHANGE: Return type changed from User to Optional<User>
+     *
+     * @param userId the user's UUID as a String
+     * @return Optional containing the User, or empty if not found
      */
-    public User findById(Long userId) {
-        return users.get(userId);
+    public Optional<User> findById(String userId) {
+        return Optional.ofNullable(users.get(userId));
     }
 
     /**
@@ -46,7 +57,7 @@ public class UserService {
      * @return the created User
      */
     public User createUser(String email, String name) {
-        Long id = (long) (users.size() + 1);
+        String id = UUID.randomUUID().toString();
         User user = new User(id, email, name);
         users.put(id, user);
         return user;

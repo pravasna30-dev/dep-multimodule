@@ -4,21 +4,26 @@ import java.util.Objects;
 
 /**
  * Represents a user in the system.
- * API Version: 1.0.0
+ * API Version: 2.0.0
+ *
+ * BREAKING CHANGE from 1.0.0: ID changed from Long to String (UUID format)
  */
 public class User {
 
-    private final Long id;
+    private final String id;  // BREAKING CHANGE: was Long
     private final String email;
     private final String name;
 
-    public User(Long id, String email, String name) {
+    public User(String id, String email, String name) {
         this.id = Objects.requireNonNull(id, "id must not be null");
         this.email = Objects.requireNonNull(email, "email must not be null");
         this.name = Objects.requireNonNull(name, "name must not be null");
     }
 
-    public Long getId() {
+    /**
+     * BREAKING CHANGE: Return type changed from Long to String
+     */
+    public String getId() {
         return id;
     }
 
@@ -45,6 +50,6 @@ public class User {
 
     @Override
     public String toString() {
-        return "User{id=" + id + ", email='" + email + "', name='" + name + "'}";
+        return "User{id='" + id + "', email='" + email + "', name='" + name + "'}";
     }
 }
