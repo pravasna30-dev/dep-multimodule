@@ -1,0 +1,124 @@
+name: CI - Breaking Change Detection Demo
+
+on:
+  push:
+    branches: [ main, feature/** ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-v1-happy-path:
+    name: "Test v1.0.0 (Happy Path)"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Run consumer tests (should PASS)
+        run: ./gradlew :consumer:test
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-v1
+          path: consumer/build/reports/tests/
+
+  test-v2-breaking-change:
+    name: "Test v2.0.0 (Breaking Change Detection)"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/method-signature-change
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Run consumer tests (expected to FAIL - demonstrates breaking change detection)
+        id: test-breaking
+        run: ./gradlew :consumer:test
+        continue-on-error: true
+
+      - name: Verify breaking change was detected
+        run: |
+          if [ "${{ steps.test-breaking.outcome }}" == "failure" ]; then
+            echo "✅ SUCCESS: Breaking change was correctly detected!"
+            echo "The consumer tests failed to compile because the library API changed."
+            exit 0
+          else
+            echo "❌ UNEXPECTED: Tests should have failed due to breaking changes"
+            exit 1
+          fi
+
+  publish-and-test-versions:
+    name: "Test Published Versions"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all branches
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Checkout main and publish library v1.0.0
+        run: |
+          git checkout main
+          ./gradlew :library:publishToMavenLocal -Pversion=1.0.0
+
+      - name: Test consumer against v1.0.0 (should PASS)
+        run: ./gradlew :consumer:test -PusePublishedLibrary -PlibraryVersion=1.0.0
+
+      - name: Checkout feature branch and publish library v2.0.0
+        run: |
+          git checkout feature/method-signature-change
+          ./gradlew :library:publishToMavenLocal -Pversion=2.0.0
+
+      - name: Test consumer against v2.0.0 (expected to FAIL)
+        id: test-v2
+        run: |
+          git checkout main
+          ./gradlew :consumer:test -PusePublishedLibrary -PlibraryVersion=2.0.0
+        continue-on-error: true
+
+      - name: Verify v2.0.0 breaking change detected
+        run: |
+          if [ "${{ steps.test-v2.outcome }}" == "failure" ]; then
+            echo "✅ SUCCESS: Breaking change in v2.0.0 was correctly detected!"
+            exit 0
+          else
+            echo "❌ UNEXPECTED: Consumer should have failed against v2.0.0"
+            exit 1
+          fi
