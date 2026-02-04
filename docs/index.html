@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Breaking Change Detection Demo</title>
+    <style>
+        :root {
+            --bg-color: #1a1b26;
+            --terminal-bg: #0d1117;
+            --text-color: #c9d1d9;
+            --green: #4ade80;
+            --red: #ff6b6b;
+            --yellow: #fbbf24;
+            --blue: #60a5fa;
+            --purple: #a78bfa;
+            --cyan: #22d3ee;
+            --prompt: #7c3aed;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            background: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: var(--cyan);
+            margin-bottom: 0.5rem;
+            font-size: 2rem;
+        }
+
+        h2 {
+            color: var(--purple);
+            margin: 2rem 0 1rem;
+            font-size: 1.5rem;
+        }
+
+        h3 {
+            color: var(--blue);
+            margin: 1.5rem 0 1rem;
+            font-size: 1.2rem;
+        }
+
+        p {
+            margin: 1rem 0;
+            color: #8b949e;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin-right: 0.5rem;
+        }
+
+        .badge-success {
+            background: var(--green);
+            color: #000;
+        }
+
+        .badge-danger {
+            background: var(--red);
+            color: #fff;
+        }
+
+        /* Terminal Styles */
+        .terminal {
+            background: var(--terminal-bg);
+            border-radius: 8px;
+            overflow: hidden;
+            margin: 1.5rem 0;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .terminal-header {
+            background: #21262d;
+            padding: 0.75rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .terminal-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .terminal-dot.red { background: #ff5f56; }
+        .terminal-dot.yellow { background: #ffbd2e; }
+        .terminal-dot.green { background: #27ca40; }
+
+        .terminal-title {
+            color: #8b949e;
+            margin-left: auto;
+            font-size: 0.85rem;
+        }
+
+        .terminal-body {
+            padding: 1rem;
+            font-size: 0.9rem;
+            overflow-x: auto;
+        }
+
+        .terminal-line {
+            display: block;
+            white-space: pre;
+            min-height: 1.4em;
+        }
+
+        .prompt {
+            color: var(--prompt);
+        }
+
+        .command {
+            color: var(--cyan);
+        }
+
+        .output {
+            color: var(--text-color);
+        }
+
+        .success {
+            color: var(--green);
+        }
+
+        .error {
+            color: var(--red);
+        }
+
+        .warning {
+            color: var(--yellow);
+        }
+
+        .comment {
+            color: #6e7681;
+        }
+
+        /* Animation */
+        .typing-demo {
+            overflow: hidden;
+        }
+
+        .typing-demo .terminal-line {
+            opacity: 0;
+            animation: fadeIn 0.1s forwards;
+        }
+
+        @keyframes fadeIn {
+            to { opacity: 1; }
+        }
+
+        .typing-demo .terminal-line:nth-child(1) { animation-delay: 0.5s; }
+        .typing-demo .terminal-line:nth-child(2) { animation-delay: 1s; }
+        .typing-demo .terminal-line:nth-child(3) { animation-delay: 1.5s; }
+        .typing-demo .terminal-line:nth-child(4) { animation-delay: 2s; }
+        .typing-demo .terminal-line:nth-child(5) { animation-delay: 2.5s; }
+        .typing-demo .terminal-line:nth-child(6) { animation-delay: 3s; }
+        .typing-demo .terminal-line:nth-child(7) { animation-delay: 3.5s; }
+        .typing-demo .terminal-line:nth-child(8) { animation-delay: 4s; }
+        .typing-demo .terminal-line:nth-child(9) { animation-delay: 4.5s; }
+        .typing-demo .terminal-line:nth-child(10) { animation-delay: 5s; }
+        .typing-demo .terminal-line:nth-child(11) { animation-delay: 5.5s; }
+        .typing-demo .terminal-line:nth-child(12) { animation-delay: 6s; }
+        .typing-demo .terminal-line:nth-child(13) { animation-delay: 6.5s; }
+        .typing-demo .terminal-line:nth-child(14) { animation-delay: 7s; }
+        .typing-demo .terminal-line:nth-child(15) { animation-delay: 7.5s; }
+        .typing-demo .terminal-line:nth-child(16) { animation-delay: 8s; }
+        .typing-demo .terminal-line:nth-child(17) { animation-delay: 8.5s; }
+        .typing-demo .terminal-line:nth-child(18) { animation-delay: 9s; }
+        .typing-demo .terminal-line:nth-child(19) { animation-delay: 9.5s; }
+        .typing-demo .terminal-line:nth-child(20) { animation-delay: 10s; }
+
+        /* Replay button */
+        .replay-btn {
+            background: var(--purple);
+            color: #fff;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            margin-top: 0.5rem;
+        }
+
+        .replay-btn:hover {
+            background: #8b5cf6;
+        }
+
+        /* Diagram */
+        .diagram {
+            background: #161b22;
+            border-radius: 8px;
+            padding: 2rem;
+            margin: 1.5rem 0;
+            text-align: center;
+        }
+
+        .flow-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .flow-box {
+            background: #21262d;
+            border: 2px solid #30363d;
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            min-width: 150px;
+        }
+
+        .flow-box.library {
+            border-color: var(--blue);
+        }
+
+        .flow-box.consumer {
+            border-color: var(--purple);
+        }
+
+        .flow-box.success {
+            border-color: var(--green);
+            background: rgba(74, 222, 128, 0.1);
+        }
+
+        .flow-box.failure {
+            border-color: var(--red);
+            background: rgba(255, 107, 107, 0.1);
+        }
+
+        .flow-arrow {
+            color: #6e7681;
+            font-size: 1.5rem;
+        }
+
+        /* Code blocks */
+        .code-block {
+            background: var(--terminal-bg);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+            overflow-x: auto;
+        }
+
+        .code-block code {
+            color: var(--text-color);
+            font-size: 0.9rem;
+        }
+
+        .keyword { color: var(--purple); }
+        .type { color: var(--cyan); }
+        .method { color: var(--blue); }
+        .string { color: var(--green); }
+        .annotation { color: var(--yellow); }
+
+        /* Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid #30363d;
+        }
+
+        th {
+            background: #21262d;
+            color: var(--cyan);
+        }
+
+        /* Links */
+        a {
+            color: var(--blue);
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        /* Footer */
+        footer {
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid #30363d;
+            text-align: center;
+            color: #6e7681;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Breaking Change Detection Demo</h1>
+        <p>How integration tests catch API breaking changes at compile-time</p>
+
+        <div>
+            <span class="badge badge-success">v1.0.0 Stable</span>
+            <span class="badge badge-danger">v2.0.0 Breaking</span>
+        </div>
+
+        <h2>📺 Demo 1: Happy Path (v1.0.0)</h2>
+        <p>Tests pass when using the stable API</p>
+
+        <div class="terminal">
+            <div class="terminal-header">
+                <span class="terminal-dot red"></span>
+                <span class="terminal-dot yellow"></span>
+                <span class="terminal-dot green"></span>
+                <span class="terminal-title">Terminal — zsh</span>
+            </div>
+            <div class="terminal-body typing-demo" id="demo1">
+                <span class="terminal-line"><span class="prompt">❯</span> <span class="command">git checkout main</span></span>
+                <span class="terminal-line"><span class="output">Switched to branch 'main'</span></span>
+                <span class="terminal-line"></span>
+                <span class="terminal-line"><span class="prompt">❯</span> <span class="command">./gradlew :consumer:test</span></span>
+                <span class="terminal-line"></span>
+                <span class="terminal-line"><span class="output">> Task :library:compileJava</span></span>
+                <span class="terminal-line"><span class="output">> Task :library:jar</span></span>
+                <span class="terminal-line"><span class="output">> Task :consumer:compileJava</span></span>
+                <span class="terminal-line"><span class="output">> Task :consumer:compileTestJava</span></span>
+                <span class="terminal-line"><span class="output">> Task :consumer:test</span></span>
+                <span class="terminal-line"></span>
+                <span class="terminal-line"><span class="success">UserServiceIntegrationTest > shouldFindExistingUserByLongId PASSED</span></span>
+                <span class="terminal-line"><span class="success">UserServiceIntegrationTest > shouldReturnNullForNonExistentUser PASSED</span></span>
+                <span class="terminal-line"><span class="success">ApiContractTest > verifyFindByIdSignature PASSED</span></span>
+                <span class="terminal-line"></span>
+                <span class="terminal-line"><span class="success">BUILD SUCCESSFUL</span> in 5s</span>
+                <span class="terminal-line"><span class="output">7 actionable tasks: 7 executed</span></span>
+                <span class="terminal-line"></span>
+                <span class="terminal-line"><span class="success">✅ All tests pass with v1.0.0 API</span></span>
+            </div>
+        </div>
+        <button class="replay-btn" onclick="replayAnimation('demo1')">▶ Replay Animation</button>
+
+        <h2>📺 Demo 2: Breaking Change Detection (v2.0.0)</h2>
+        <p>Tests fail at compile-time when API changes</p>
+
+        <div class="terminal">
+            <div class="terminal-header">
+                <span class="terminal-dot red"></span>
+                <span class="terminal-dot yellow"></span>
+                <span class="terminal-dot green"></span>
+                <span class="terminal-title">Terminal — zsh</span>
+            </div>
+            <div class="terminal-body typing-demo" id="demo2">
+                <span class="terminal-line"><span class="prompt">❯</span> <span class="command">git checkout feature/method-signature-change</span></span>
+                <span class="terminal-line"><span class="output">Switched to branch 'feature/method-signature-change'</span></span>
+                <span class="terminal-line"></span>
+                <span class="terminal-line"><span class="prompt">❯</span> <span class="command">./gradlew :consumer:test</span></span>
+                <span class="terminal-line"></span>
+                <span class="terminal-line"><span class="output">> Task :library:compileJava</span></span>
+                <span class="terminal-line"><span class="output">> Task :library:jar</span></span>
+                <span class="terminal-line"><span class="error">> Task :consumer:compileJava FAILED</span></span>
+                <span class="terminal-line"></span>
+                <span class="terminal-line"><span class="error">error: incompatible types: Long cannot be converted to String</span></span>
+                <span class="terminal-line"><span class="output">        User user = userService.findById(userId);</span></span>
+                <span class="terminal-line"><span class="error">                                         ^</span></span>
+                <span class="terminal-line"></span>
+                <span class="terminal-line"><span class="error">error: incompatible types: Optional&lt;User&gt; cannot be converted to User</span></span>
+                <span class="terminal-line"><span class="output">        User user = userService.findById(userId);</span></span>
+                <span class="terminal-line"><span class="error">        ^</span></span>
+                <span class="terminal-line"></span>
+                <span class="terminal-line"><span class="error">BUILD FAILED</span> in 2s</span>
+                <span class="terminal-line"></span>
+                <span class="terminal-line"><span class="error">❌ Breaking change detected! Consumer won't compile.</span></span>
+                <span class="terminal-line"><span class="warning">🛡️ Caught BEFORE production deployment!</span></span>
+            </div>
+        </div>
+        <button class="replay-btn" onclick="replayAnimation('demo2')">▶ Replay Animation</button>
+
+        <h2>🔄 How It Works</h2>
+
+        <div class="diagram">
+            <div class="flow-container">
+                <div class="flow-box library">
+                    <strong>Library v1.0.0</strong><br>
+                    <code>findById(Long)</code>
+                </div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-box consumer">
+                    <strong>Consumer</strong><br>
+                    <code>findById(1L)</code>
+                </div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-box success">
+                    <strong>✅ Compiles</strong><br>
+                    Tests Pass
+                </div>
+            </div>
+            <br><br>
+            <div class="flow-container">
+                <div class="flow-box library" style="border-color: var(--red);">
+                    <strong>Library v2.0.0</strong><br>
+                    <code>findById(String)</code>
+                </div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-box consumer">
+                    <strong>Consumer</strong><br>
+                    <code>findById(1L)</code>
+                </div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-box failure">
+                    <strong>❌ Won't Compile</strong><br>
+                    Type Mismatch
+                </div>
+            </div>
+        </div>
+
+        <h2>📝 API Changes</h2>
+
+        <h3>v1.0.0 → v2.0.0 Breaking Changes</h3>
+
+        <table>
+            <tr>
+                <th>Method</th>
+                <th>v1.0.0</th>
+                <th>v2.0.0</th>
+                <th>Detection</th>
+            </tr>
+            <tr>
+                <td><code>findById()</code></td>
+                <td><code>Long userId</code></td>
+                <td><code>String userId</code></td>
+                <td>Compile-time</td>
+            </tr>
+            <tr>
+                <td><code>findById()</code> return</td>
+                <td><code>User</code></td>
+                <td><code>Optional&lt;User&gt;</code></td>
+                <td>Compile-time</td>
+            </tr>
+            <tr>
+                <td><code>User.getId()</code></td>
+                <td><code>Long</code></td>
+                <td><code>String</code></td>
+                <td>Compile-time</td>
+            </tr>
+        </table>
+
+        <h2>🧪 Test Examples</h2>
+
+        <h3>Integration Test (Compile-time Detection)</h3>
+        <div class="code-block">
+            <code>
+<span class="annotation">@Test</span>
+<span class="keyword">void</span> <span class="method">shouldFindExistingUserByLongId</span>() {
+    <span class="type">Long</span> userId = 1L;  <span class="comment">// Explicit type</span>
+    <span class="type">User</span> user = userService.<span class="method">findById</span>(userId);  <span class="comment">// Breaks if param changes</span>
+    assertThat(user.<span class="method">getId</span>()).<span class="method">isEqualTo</span>(1L);
+}
+            </code>
+        </div>
+
+        <h3>Contract Test (Runtime Detection)</h3>
+        <div class="code-block">
+            <code>
+<span class="annotation">@Test</span>
+<span class="keyword">void</span> <span class="method">verifyFindByIdSignature</span>() <span class="keyword">throws</span> <span class="type">NoSuchMethodException</span> {
+    <span class="type">Method</span> method = <span class="type">UserService</span>.<span class="keyword">class</span>.<span class="method">getMethod</span>(<span class="string">"findById"</span>, <span class="type">Long</span>.<span class="keyword">class</span>);
+    assertThat(method.<span class="method">getReturnType</span>()).<span class="method">isEqualTo</span>(<span class="type">User</span>.<span class="keyword">class</span>);
+}
+            </code>
+        </div>
+
+        <h2>🚀 Quick Start</h2>
+
+        <div class="terminal">
+            <div class="terminal-header">
+                <span class="terminal-dot red"></span>
+                <span class="terminal-dot yellow"></span>
+                <span class="terminal-dot green"></span>
+                <span class="terminal-title">Quick Start</span>
+            </div>
+            <div class="terminal-body">
+                <span class="terminal-line"><span class="comment"># Clone the repository</span></span>
+                <span class="terminal-line"><span class="prompt">❯</span> <span class="command">git clone https://github.com/pravasna30-dev/dep-multimodule.git</span></span>
+                <span class="terminal-line"><span class="prompt">❯</span> <span class="command">cd dep-multimodule</span></span>
+                <span class="terminal-line"></span>
+                <span class="terminal-line"><span class="comment"># Test happy path (v1.0.0)</span></span>
+                <span class="terminal-line"><span class="prompt">❯</span> <span class="command">git checkout main</span></span>
+                <span class="terminal-line"><span class="prompt">❯</span> <span class="command">./gradlew :consumer:test</span></span>
+                <span class="terminal-line"></span>
+                <span class="terminal-line"><span class="comment"># Test breaking change detection (v2.0.0)</span></span>
+                <span class="terminal-line"><span class="prompt">❯</span> <span class="command">git checkout feature/method-signature-change</span></span>
+                <span class="terminal-line"><span class="prompt">❯</span> <span class="command">./gradlew :consumer:test</span></span>
+            </div>
+        </div>
+
+        <h2>📚 Related Repositories</h2>
+
+        <table>
+            <tr>
+                <th>Repository</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td><a href="https://github.com/pravasna30-dev/dep-library">dep-library</a></td>
+                <td>Standalone library (separate repo use case)</td>
+            </tr>
+            <tr>
+                <td><a href="https://github.com/pravasna30-dev/dep-consumer">dep-consumer</a></td>
+                <td>Standalone consumer (separate repo use case)</td>
+            </tr>
+        </table>
+
+        <footer>
+            <p>Built with ❤️ to demonstrate dependency management best practices</p>
+            <p><a href="https://github.com/pravasna30-dev/dep-multimodule">View on GitHub</a></p>
+        </footer>
+    </div>
+
+    <script>
+        function replayAnimation(demoId) {
+            const demo = document.getElementById(demoId);
+            const lines = demo.querySelectorAll('.terminal-line');
+
+            // Reset animation
+            lines.forEach(line => {
+                line.style.animation = 'none';
+                line.offsetHeight; // Trigger reflow
+                line.style.animation = null;
+            });
+        }
+
+        // Auto-replay animations when they come into view
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    replayAnimation(entry.target.id);
+                }
+            });
+        }, { threshold: 0.5 });
+
+        document.querySelectorAll('.typing-demo').forEach(demo => {
+            observer.observe(demo);
+        });
+    </script>
+</body>
+</html>
