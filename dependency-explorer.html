@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dependency Explorer — dep-multimodule</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { height: 100%; width: 100%; overflow: hidden; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    input[type="text"], input[type="password"] { font-family: inherit; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    @keyframes typing {
+      0%, 60%, 100% { opacity: 0.4; }
+      30% { opacity: 1; }
+    }
+    .typing-indicator span {
+      display: inline-block;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      margin: 0 2px;
+      animation: typing 1.4s infinite;
+    }
+    .typing-indicator span:nth-child(1) { animation-delay: 0s; }
+    .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const { useState, useEffect, useRef, useCallback, useMemo, createElement: h } = React;
+
+// ── GitHub Repo Metadata ─────────────────────────────────────────────────────
+var REPO = {
+  name: "dep-multimodule",
+  fullName: "pravasna30-dev/dep-multimodule",
+  url: "https://github.com/pravasna30-dev/dep-multimodule",
+  cloneUrl: "https://github.com/pravasna30-dev/dep-multimodule.git",
+  owner: "pravasna30-dev",
+  visibility: "Public",
+  language: "Java",
+  license: "None",
+  defaultBranch: "main",
+  size: "68 KB",
+  created: "2026-02-04",
+  updated: "2026-02-05",
+  pushed: "2026-02-05",
+  stars: 0,
+  forks: 0,
+  openIssues: 0,
+  watchers: 0,
+  topics: [],
+  releases: [],
+  features: { issues: true, projects: true, wiki: true, pages: false, discussions: false },
+};
+
+// ── Dependency Data ──────────────────────────────────────────────────────────
+const NODES = [
+  { id: "root", groupId: "com.example", artifactId: "use-case-1-multimodule", version: "1.0.0", type: "root", description: "Root multi-module project" },
+  { id: "library", groupId: "com.example", artifactId: "library", version: "1.0.0", type: "library", description: "Core library providing UserService and User APIs. Publishes to mavenLocal with sources JAR.", classes: ["UserService", "User"] },
+  { id: "consumer", groupId: "com.example", artifactId: "consumer", version: "1.0.0", type: "consumer", description: "Application that consumes the library API. Contains integration and contract tests.", classes: ["Application", "UserServiceIntegrationTest", "ApiContractTest"] },
+  { id: "junit-bom", groupId: "org.junit", artifactId: "junit-bom", version: "5.10.2", type: "library", scope: "test", description: "JUnit 5 Bill of Materials — manages versions for all JUnit modules." },
+  { id: "junit-jupiter", groupId: "org.junit.jupiter", artifactId: "junit-jupiter", version: "5.10.2", type: "library", scope: "test", description: "JUnit Jupiter API and engine for writing and running tests." },
+  { id: "junit-launcher", groupId: "org.junit.platform", artifactId: "junit-platform-launcher", version: "5.10.2", type: "library", scope: "testRuntime", description: "JUnit Platform Launcher required by Gradle 9.x for test execution." },
+  { id: "assertj", groupId: "org.assertj", artifactId: "assertj-core", version: "3.25.3", type: "library", scope: "test", description: "AssertJ fluent assertion library for expressive test assertions." },
+];
+
+const LINKS = [
+  { source: "root", target: "library", type: "module", label: "submodule" },
+  { source: "root", target: "consumer", type: "module", label: "submodule" },
+  { source: "consumer", target: "library", type: "implementation", label: "implementation" },
+  { source: "consumer", target: "junit-bom", type: "test", label: "testImplementation (platform)" },
+  { source: "consumer", target: "junit-jupiter", type: "test", label: "testImplementation" },
+  { source: "consumer", target: "junit-launcher", type: "test", label: "testRuntimeOnly" },
+  { source: "consumer", target: "assertj", type: "test", label: "testImplementation" },
+  { source: "junit-jupiter", target: "junit-bom", type: "platform", label: "managed by BOM" },
+  { source: "junit-launcher", target: "junit-bom", type: "platform", label: "managed by BOM" },
+];
+
+// ── Theme System ─────────────────────────────────────────────────────────────
+const THEMES = {
+  light: {
+    // Surfaces
+    pageBg: "#f8fafc",
+    panelBg: "white",
+    panelBorder: "#e2e8f0",
+    sectionBorder: "#f1f5f9",
+    // Text
+    textPrimary: "#1e293b",
+    textSecondary: "#475569",
+    textMuted: "#94a3b8",
+    textInverse: "white",
+    // Inputs
+    inputBg: "transparent",
+    inputText: "#334155",
+    inputBorder: "#e2e8f0",
+    inputIconBg: "#f8fafc",
+    // Buttons
+    btnBg: "white",
+    btnBorder: "#e2e8f0",
+    btnText: "#475569",
+    btnHoverBg: "#f8fafc",
+    // Tags / badges
+    tagBg: "#f1f5f9",
+    tagText: "#64748b",
+    // Graph
+    graphBg: "#f8fafc",
+    nodeFill: "white",
+    labelEdge: "#94a3b8",
+    hintBg: "rgba(255,255,255,0.9)",
+    // Code block
+    codeBg: "#f8fafc",
+    codeBorder: "#e2e8f0",
+    codeLabel: "#94a3b8",
+    codeValue: "#1e293b",
+    // Dep row
+    depRowBorder: "#f1f5f9",
+    depRowHover: "#f8fafc",
+    depRowTitle: "#334155",
+    depRowSub: "#94a3b8",
+    // Scrollbar
+    scrollThumb: "#cbd5e1",
+    // Toggle track
+    toggleTrackOff: "#cbd5e1",
+    toggleTrackOn: "#6366f1",
+    toggleKnob: "white",
+    // Shadow
+    shadow: "0 1px 3px rgba(0,0,0,0.08)",
+    glowOpacity: "0.15",
+    glowStrongOpacity: "0.25",
+    // Type filter inactive
+    filterInactiveBorder: "#cbd5e1",
+    filterInactiveText: "#94a3b8",
+    filterInactiveBg: "white",
+    // Chat
+    chatBg: "white",
+    chatBorder: "#e2e8f0",
+    chatUserBubble: "#6366f1",
+    chatUserText: "white",
+    chatAssistantBubble: "#f1f5f9",
+    chatAssistantText: "#1e293b",
+    chatInputBg: "white",
+  },
+  dark: {
+    pageBg: "#0f172a",
+    panelBg: "#1e293b",
+    panelBorder: "#334155",
+    sectionBorder: "#2d3a4f",
+    textPrimary: "#f1f5f9",
+    textSecondary: "#cbd5e1",
+    textMuted: "#64748b",
+    textInverse: "white",
+    inputBg: "#0f172a",
+    inputText: "#e2e8f0",
+    inputBorder: "#475569",
+    inputIconBg: "#334155",
+    btnBg: "#334155",
+    btnBorder: "#475569",
+    btnText: "#cbd5e1",
+    btnHoverBg: "#3b4a63",
+    tagBg: "#334155",
+    tagText: "#94a3b8",
+    graphBg: "#0f172a",
+    nodeFill: "#1e293b",
+    labelEdge: "#64748b",
+    hintBg: "rgba(30,41,59,0.92)",
+    codeBg: "#0f172a",
+    codeBorder: "#334155",
+    codeLabel: "#64748b",
+    codeValue: "#f1f5f9",
+    depRowBorder: "#2d3a4f",
+    depRowHover: "#293548",
+    depRowTitle: "#e2e8f0",
+    depRowSub: "#64748b",
+    scrollThumb: "#475569",
+    toggleTrackOff: "#475569",
+    toggleTrackOn: "#818cf8",
+    toggleKnob: "#1e293b",
+    shadow: "0 1px 4px rgba(0,0,0,0.4)",
+    glowOpacity: "0.3",
+    glowStrongOpacity: "0.5",
+    filterInactiveBorder: "#475569",
+    filterInactiveText: "#64748b",
+    filterInactiveBg: "#1e293b",
+    // Chat
+    chatBg: "#1e293b",
+    chatBorder: "#334155",
+    chatUserBubble: "#818cf8",
+    chatUserText: "white",
+    chatAssistantBubble: "#2d3a4f",
+    chatAssistantText: "#f1f5f9",
+    chatInputBg: "#0f172a",
+  },
+};
+
+// ── Type colors (same in both themes, but bg adapts) ─────────────────────────
+const TYPE_COLORS = {
+  root:     { color: "#818cf8", label: "Root Project", icon: "\u{1F4E6}" },
+  library:  { color: "#22d3ee", label: "Library",      icon: "\u{1F4DA}" },
+  consumer: { color: "#fbbf24", label: "Consumer",     icon: "\u26A1" },
+};
+
+function typeStyle(type, dark) {
+  var base = TYPE_COLORS[type];
+  if (!dark) {
+    var map = { root: { color: "#6366f1", bg: "#eef2ff", border: "#c7d2fe" }, library: { color: "#0891b2", bg: "#ecfeff", border: "#a5f3fc" }, consumer: { color: "#d97706", bg: "#fffbeb", border: "#fde68a" } };
+    return Object.assign({}, base, map[type]);
+  }
+  var dmap = { root: { color: "#818cf8", bg: "#1e1b4b", border: "#4338ca" }, library: { color: "#22d3ee", bg: "#083344", border: "#155e75" }, consumer: { color: "#fbbf24", bg: "#422006", border: "#92400e" } };
+  return Object.assign({}, base, dmap[type]);
+}
+
+const SCOPE_COLORS = { test: "#8b5cf6", testRuntime: "#a78bfa", compile: "#059669" };
+
+function linkStyle(type, dark) {
+  var styles = {
+    module:         { color: dark ? "#818cf8" : "#6366f1", dash: "none",  width: 2.5 },
+    implementation: { color: dark ? "#fbbf24" : "#d97706", dash: "none",  width: 2.5 },
+    test:           { color: "#8b5cf6", dash: "6,3",   width: 1.8 },
+    platform:       { color: dark ? "#64748b" : "#94a3b8", dash: "3,3",   width: 1.2 },
+  };
+  return styles[type] || styles.implementation;
+}
+
+const nodeRadius = (n) => (n.type === "root" ? 32 : n.type === "consumer" ? 28 : 24);
+const sid = (l) => (typeof l.source === "object" ? l.source.id : l.source);
+const tid = (l) => (typeof l.target === "object" ? l.target.id : l.target);
+
+// ── Graph Query Function ─────────────────────────────────────────────────────
+function queryGraph(question) {
+  var q = question.toLowerCase().trim();
+
+  // Find matching node (case-insensitive, partial match)
+  var findNode = function(name) {
+    var nameLower = name.toLowerCase();
+    return NODES.find(function(n) {
+      return n.artifactId.toLowerCase().includes(nameLower) ||
+             n.id.toLowerCase().includes(nameLower);
+    });
+  };
+
+  // Test dependencies
+  if (q.includes("test dependencies") || q.includes("test") && q.includes("dependencies")) {
+    var testNodes = NODES.filter(function(n) { return n.scope && n.scope.includes("test"); });
+    if (testNodes.length === 0) return "No test-scoped dependencies found.";
+    return "Test dependencies: " + testNodes.map(function(n) { return n.artifactId; }).join(", ");
+  }
+
+  // Count nodes/modules
+  if (q.includes("how many") && (q.includes("modules") || q.includes("nodes"))) {
+    return "Total modules: " + NODES.length;
+  }
+
+  // List libraries or consumers
+  if (q.includes("list") && q.includes("libraries")) {
+    var libs = NODES.filter(function(n) { return n.type === "library"; });
+    return "Libraries: " + libs.map(function(n) { return n.artifactId; }).join(", ");
+  }
+  if (q.includes("list") && q.includes("consumers")) {
+    var consumers = NODES.filter(function(n) { return n.type === "consumer"; });
+    return "Consumers: " + consumers.map(function(n) { return n.artifactId; }).join(", ");
+  }
+
+  // Extract artifact name from question (e.g., "what depends on X" or "dependencies of X")
+  var parts = q.split(/\s+/);
+  var nodeName = null;
+
+  // Find potential node name (last significant word or phrase)
+  for (var i = parts.length - 1; i >= 0; i--) {
+    var word = parts[i].replace(/[^a-z0-9-]/g, "");
+    if (word.length > 0 && word !== "on" && word !== "of" && word !== "and") {
+      nodeName = word;
+      break;
+    }
+  }
+
+  var node = nodeName ? findNode(nodeName) : null;
+
+  // What depends on X / What uses X
+  if ((q.includes("what depends on") || q.includes("what uses")) && node) {
+    var incoming = LINKS.filter(function(l) { return tid(l) === node.id; });
+    if (incoming.length === 0) return "Nothing depends on " + node.artifactId + ".";
+    var depsList = incoming.map(function(l) {
+      var srcNode = NODES.find(function(n) { return n.id === sid(l); });
+      return srcNode ? srcNode.artifactId : sid(l);
+    }).join(", ");
+    return incoming.length + " module(s) depend on " + node.artifactId + ": " + depsList;
+  }
+
+  // Dependencies of X / What does X depend on
+  if ((q.includes("dependencies of") || q.includes("depend on")) && node) {
+    var outgoing = LINKS.filter(function(l) { return sid(l) === node.id; });
+    if (outgoing.length === 0) return node.artifactId + " has no dependencies.";
+    var depsOf = outgoing.map(function(l) {
+      var tgtNode = NODES.find(function(n) { return n.id === tid(l); });
+      return tgtNode ? tgtNode.artifactId : tid(l);
+    }).join(", ");
+    return node.artifactId + " depends on " + outgoing.length + " module(s): " + depsOf;
+  }
+
+  // GAV / Coordinates of X
+  if ((q.includes("gav") || q.includes("coordinates")) && node) {
+    return "GAV for " + node.artifactId + ": " + node.groupId + ":" + node.artifactId + ":" + node.version;
+  }
+
+  // What is X / Describe X
+  if ((q.includes("what is") || q.includes("describe")) && node) {
+    var typeStr = node.type === "root" ? "Root" : node.type === "library" ? "Library" : "Consumer";
+    var scopeStr = node.scope ? " (" + node.scope + " scope)" : "";
+    return typeStr + " module: " + node.artifactId + scopeStr + ". " + node.description;
+  }
+
+  // Relationship between X and Y
+  if (q.includes("relationship") && (q.includes("between") || q.includes("and"))) {
+    var words = q.replace(/relationship|between|and/g, " ").split(/\s+/).filter(function(w) { return w.length > 0; });
+    var name1 = words[0];
+    var name2 = words.length > 1 ? words[1] : null;
+    if (name1 && name2) {
+      var n1 = findNode(name1);
+      var n2 = findNode(name2);
+      if (n1 && n2) {
+        var directLink = LINKS.find(function(l) { return (sid(l) === n1.id && tid(l) === n2.id) || (sid(l) === n2.id && tid(l) === n1.id); });
+        if (directLink) {
+          var from = directLink.source === n1.id ? n1.artifactId : n2.artifactId;
+          var to = directLink.target === n1.id ? n1.artifactId : n2.artifactId;
+          return from + " -> " + to + " (" + directLink.label + ")";
+        } else {
+          return "No direct dependency between " + n1.artifactId + " and " + n2.artifactId + ".";
+        }
+      }
+    }
+  }
+
+  // Statistics
+  if (q.includes("statistics") || q.includes("summary")) {
+    var roots = NODES.filter(function(n) { return n.type === "root"; }).length;
+    var libs = NODES.filter(function(n) { return n.type === "library"; }).length;
+    var cons = NODES.filter(function(n) { return n.type === "consumer"; }).length;
+    var tests = NODES.filter(function(n) { return n.scope; }).length;
+    return "Graph summary: " + NODES.length + " nodes (" + roots + " root, " + libs + " libraries, " + cons + " consumers), " + LINKS.length + " links, " + tests + " test-scoped modules.";
+  }
+
+  // Default
+  return "I can answer questions about this dependency graph. Try asking: 'what depends on X', 'dependencies of X', 'test dependencies', 'how many modules', 'list libraries', 'GAV of X', 'describe X', or 'statistics'.";
+}
+
+// ── Dark Mode Toggle Switch Component ────────────────────────────────────────
+function ThemeToggle(props) {
+  var dark = props.dark, onToggle = props.onToggle, t = props.t;
+  return h("button", {
+    onClick: onToggle,
+    "aria-label": dark ? "Switch to light mode" : "Switch to dark mode",
+    style: {
+      position: "relative", width: 52, height: 28, borderRadius: 14, border: "none", cursor: "pointer",
+      background: dark ? t.toggleTrackOn : t.toggleTrackOff, transition: "background 0.3s", flexShrink: 0,
+      display: "flex", alignItems: "center", padding: "0 4px",
+    }
+  },
+    // Sun icon (left)
+    h("span", { style: { position: "absolute", left: 7, fontSize: 12, opacity: dark ? 0.3 : 1, transition: "opacity 0.3s", lineHeight: 1 } }, "\u2600\uFE0F"),
+    // Moon icon (right)
+    h("span", { style: { position: "absolute", right: 7, fontSize: 12, opacity: dark ? 1 : 0.3, transition: "opacity 0.3s", lineHeight: 1 } }, "\u{1F319}"),
+    // Knob
+    h("span", { style: {
+      position: "absolute", top: 3, left: dark ? 27 : 3,
+      width: 22, height: 22, borderRadius: "50%", background: dark ? "#1e293b" : "white",
+      boxShadow: "0 1px 3px rgba(0,0,0,0.2)", transition: "left 0.3s, background 0.3s",
+    }})
+  );
+}
+
+// ── Chat Message Component ───────────────────────────────────────────────────
+function ChatMessage(props) {
+  var msg = props.message, t = props.t;
+  var isUser = msg.role === "user";
+  return h("div", {
+    style: {
+      display: "flex", justifyContent: isUser ? "flex-end" : "flex-start",
+      marginBottom: 12, paddingX: 12
+    }
+  },
+    h("div", {
+      style: {
+        maxWidth: "85%", padding: "10px 14px", borderRadius: 12,
+        background: isUser ? t.chatUserBubble : t.chatAssistantBubble,
+        color: isUser ? t.chatUserText : t.chatAssistantText,
+        fontSize: 13, lineHeight: 1.5, wordWrap: "break-word"
+      }
+    }, msg.content)
+  );
+}
+
+// ── Chat Panel Component ─────────────────────────────────────────────────────
+function ChatPanel(props) {
+  var t = props.t, dark = props.dark, chatMessages = props.chatMessages, chatInput = props.chatInput,
+      setChatInput = props.setChatInput, onSendMessage = props.onSendMessage, chatLoading = props.chatLoading,
+      chatSettings = props.chatSettings, setChatSettings = props.setChatSettings, apiKey = props.apiKey,
+      setApiKey = props.setApiKey, provider = props.provider, setProvider = props.setProvider;
+
+  var messagesEndRef = useRef(null);
+
+  useEffect(function() {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMessages]);
+
+  var handleSend = function() {
+    if (chatInput.trim()) {
+      onSendMessage(chatInput);
+      setChatInput("");
+    }
+  };
+
+  var handleKeyDown = function(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  return h("div", {
+    style: {
+      position: "absolute", right: 12, bottom: 12, width: 380, height: 550,
+      background: t.chatBg, border: "1px solid " + t.chatBorder, borderRadius: 12,
+      display: "flex", flexDirection: "column", boxShadow: t.shadow, zIndex: 50,
+      transition: "all 0.3s"
+    }
+  },
+    // Header
+    h("div", {
+      style: {
+        padding: "12px 16px", borderBottom: "1px solid " + t.chatBorder,
+        display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0
+      }
+    },
+      h("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+        h("span", { style: { fontSize: 16 } }, "\u{1F916}"),
+        h("span", { style: { fontWeight: 600, fontSize: 14, color: t.textPrimary } }, "AI Assistant"),
+        h("span", {
+          style: {
+            fontSize: 11, padding: "2px 8px", borderRadius: 4, background: provider === "claude" ? "#818cf8" : "#64748b",
+            color: "white", fontWeight: 500, marginLeft: 8
+          }
+        }, provider === "claude" ? "Claude" : "Local")
+      ),
+      h("button", {
+        onClick: function() { setChatSettings(!chatSettings); },
+        style: {
+          background: "none", border: "none", cursor: "pointer", fontSize: 16, color: t.textMuted,
+          padding: "4px 8px", lineHeight: 1
+        }
+      }, "\u{1F527}")
+    ),
+
+    // Settings panel
+    chatSettings ? h("div", {
+      style: {
+        padding: 16, borderBottom: "1px solid " + t.chatBorder, overflowY: "auto",
+        background: dark ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.5)"
+      }
+    },
+      h("div", { style: { marginBottom: 12 } },
+        h("label", {
+          style: {
+            display: "block", fontSize: 12, fontWeight: 600, color: t.textSecondary,
+            marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em"
+          }
+        }, "Provider"),
+        h("div", { style: { display: "flex", gap: 8 } },
+          ["local", "claude"].map(function(p) {
+            return h("button", {
+              key: p, onClick: function() { setProvider(p); },
+              style: {
+                flex: 1, padding: "8px 12px", borderRadius: 6, fontSize: 12,
+                fontWeight: 600, cursor: "pointer", border: "1px solid " + (provider === p ? "#818cf8" : t.inputBorder),
+                background: provider === p ? (dark ? "#1e1b4b" : "#eef2ff") : "transparent",
+                color: provider === p ? (dark ? "#818cf8" : "#6366f1") : t.textSecondary,
+                transition: "all 0.15s"
+              }
+            }, p === "local" ? "Local" : "Claude");
+          })
+        )
+      ),
+      provider === "claude" ? h("div", null,
+        h("label", {
+          style: {
+            display: "block", fontSize: 12, fontWeight: 600, color: t.textSecondary,
+            marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em"
+          }
+        }, "Anthropic API Key"),
+        h("input", {
+          type: "password", placeholder: "sk-ant-...",
+          value: apiKey, onChange: function(e) { setApiKey(e.target.value); },
+          style: {
+            width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid " + t.inputBorder,
+            background: t.inputBg, color: t.inputText, fontSize: 12, marginBottom: 10,
+            outline: "none"
+          }
+        }),
+        h("div", {
+          style: {
+            fontSize: 11, color: t.textMuted, lineHeight: 1.5, padding: "8px", borderRadius: 6,
+            background: dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)"
+          }
+        }, "Your API key is stored in memory only and never persisted.")
+      ) : null
+    ) : null,
+
+    // Messages area
+    h("div", {
+      style: {
+        flex: 1, overflowY: "auto", padding: "12px 16px", display: "flex",
+        flexDirection: "column"
+      }
+    },
+      chatMessages.length === 0 ? h("div", {
+        style: {
+          display: "flex", alignItems: "center", justifyContent: "center", height: "100%",
+          color: t.textMuted, fontSize: 12, textAlign: "center"
+        }
+      }, "Ask me about the dependency graph!") : null,
+      chatMessages.map(function(msg, i) {
+        return h(ChatMessage, { key: i, message: msg, t: t });
+      }),
+      chatLoading ? h("div", {
+        style: { display: "flex", justifyContent: "flex-start", marginBottom: 12 }
+      },
+        h("div", {
+          style: {
+            padding: "10px 14px", borderRadius: 12, background: t.chatAssistantBubble,
+            color: t.chatAssistantText
+          }
+        },
+          h("div", { className: "typing-indicator" },
+            h("span", null), h("span", null), h("span", null)
+          )
+        )
+      ) : null,
+      h("div", { ref: messagesEndRef })
+    ),
+
+    // Input area
+    h("div", {
+      style: {
+        padding: "12px 16px", borderTop: "1px solid " + t.chatBorder,
+        display: "flex", gap: 8, flexShrink: 0
+      }
+    },
+      h("input", {
+        type: "text", placeholder: "Ask a question...", value: chatInput,
+        onChange: function(e) { setChatInput(e.target.value); },
+        onKeyDown: handleKeyDown, disabled: chatLoading,
+        style: {
+          flex: 1, padding: "8px 10px", borderRadius: 6, border: "1px solid " + t.inputBorder,
+          background: t.chatInputBg, color: t.inputText, fontSize: 12,
+          outline: "none", opacity: chatLoading ? 0.6 : 1,
+          cursor: chatLoading ? "not-allowed" : "text"
+        }
+      }),
+      h("button", {
+        onClick: handleSend, disabled: chatLoading || !chatInput.trim(),
+        style: {
+          padding: "8px 14px", borderRadius: 6, border: "none",
+          background: (chatLoading || !chatInput.trim()) ? t.textMuted : "#818cf8",
+          color: "white", fontSize: 12, fontWeight: 600, cursor: chatLoading || !chatInput.trim() ? "not-allowed" : "pointer",
+          transition: "all 0.15s", opacity: (chatLoading || !chatInput.trim()) ? 0.5 : 1
+        }
+      }, "\u{1F4A8}")
+    )
+  );
+}
+
+// ── Main Component ───────────────────────────────────────────────────────────
+function DependencyExplorer() {
+  var svgRef = useRef(null);
+  var simRef = useRef(null);
+  var gRef = useRef(null);
+  var zoomRef = useRef(null);
+
+  var _nodes = useState(function() { return NODES.map(function(n) { return Object.assign({}, n); }); });
+  var nodes = _nodes[0], setNodes = _nodes[1];
+  var _links = useState(function() { return LINKS.map(function(l) { return Object.assign({}, l); }); });
+  var links = _links[0];
+  var _sel = useState(null); var selected = _sel[0], setSelected = _sel[1];
+  var _hov = useState(null); var hovered = _hov[0], setHovered = _hov[1];
+  var _filt = useState({ groupId: "", artifactId: "", version: "" }); var filters = _filt[0], setFilters = _filt[1];
+  var _tf = useState({ root: true, library: true, consumer: true }); var typeFilter = _tf[0], setTypeFilter = _tf[1];
+  var _sf = useState({ main: true, test: true, testRuntime: true }); var scopeFilter = _sf[0], setScopeFilter = _sf[1];
+  var _sl = useState(true); var showLabels = _sl[0], setShowLabels = _sl[1];
+  var _dm = useState(false); var dark = _dm[0], setDark = _dm[1];
+  var _dims = useState({ width: 900, height: 600 }); var dims = _dims[0], setDims = _dims[1];
+
+  // Chat state
+  var _chatOpen = useState(true); var chatOpen = _chatOpen[0], setChatOpen = _chatOpen[1];
+  var _chatMessages = useState([{ role: "assistant", content: "Hello! Ask me anything about this dependency graph. I can help you understand module relationships, dependencies, and coordinates.", timestamp: Date.now() }]);
+  var chatMessages = _chatMessages[0], setChatMessages = _chatMessages[1];
+  var _chatInput = useState(""); var chatInput = _chatInput[0], setChatInput = _chatInput[1];
+  var _chatLoading = useState(false); var chatLoading = _chatLoading[0], setChatLoading = _chatLoading[1];
+  var _chatSettings = useState(false); var chatSettings = _chatSettings[0], setChatSettings = _chatSettings[1];
+  var _apiKey = useState(""); var apiKey = _apiKey[0], setApiKey = _apiKey[1];
+  var _provider = useState("local"); var provider = _provider[0], setProvider = _provider[1];
+
+  var t = dark ? THEMES.dark : THEMES.light;
+
+  // ── Visible node ids ─────────────────────────────────────────────────────
+  var visibleIds = useMemo(function() {
+    var set = new Set();
+    nodes.forEach(function(n) {
+      var mg = !filters.groupId || n.groupId.toLowerCase().includes(filters.groupId.toLowerCase());
+      var ma = !filters.artifactId || n.artifactId.toLowerCase().includes(filters.artifactId.toLowerCase());
+      var mv = !filters.version || n.version.includes(filters.version);
+      var mt = typeFilter[n.type];
+      var ms = (!n.scope && scopeFilter.main) || (n.scope === "test" && scopeFilter.test) || (n.scope === "testRuntime" && scopeFilter.testRuntime);
+      if (mg && ma && mv && mt && ms) set.add(n.id);
+    });
+    return set;
+  }, [nodes, filters, typeFilter, scopeFilter]);
+
+  var visibleLinks = useMemo(function() { return links.filter(function(l) { return visibleIds.has(sid(l)) && visibleIds.has(tid(l)); }); }, [links, visibleIds]);
+
+  var connectedIds = useMemo(function() {
+    if (!hovered) return new Set();
+    var set = new Set([hovered]);
+    links.forEach(function(l) { if (sid(l) === hovered) set.add(tid(l)); if (tid(l) === hovered) set.add(sid(l)); });
+    return set;
+  }, [hovered, links]);
+
+  // ── Resize ───────────────────────────────────────────────────────────────
+  useEffect(function() {
+    var el = svgRef.current && svgRef.current.parentElement;
+    if (!el) return;
+    var ro = new ResizeObserver(function(e) { var r = e[0].contentRect; if (r.width > 0 && r.height > 0) setDims({ width: r.width, height: r.height }); });
+    ro.observe(el);
+    return function() { ro.disconnect(); };
+  }, []);
+
+  // ── D3 Force ─────────────────────────────────────────────────────────────
+  useEffect(function() {
+    var w = dims.width, ht = dims.height;
+    var sim = d3.forceSimulation(nodes)
+      .force("link", d3.forceLink(links).id(function(d) { return d.id; }).distance(140).strength(0.7))
+      .force("charge", d3.forceManyBody().strength(-600))
+      .force("center", d3.forceCenter(w / 2, ht / 2))
+      .force("collision", d3.forceCollide().radius(50))
+      .force("x", d3.forceX(w / 2).strength(0.05))
+      .force("y", d3.forceY(ht / 2).strength(0.05))
+      .alphaDecay(0.02)
+      .on("tick", function() { setNodes(function(p) { return p.map(function(n) { return Object.assign({}, n); }); }); });
+    simRef.current = sim;
+    return function() { sim.stop(); };
+  }, [dims]);
+
+  // ── Zoom ─────────────────────────────────────────────────────────────────
+  useEffect(function() {
+    if (!svgRef.current) return;
+    var zoom = d3.zoom().scaleExtent([0.2, 4]).on("zoom", function(ev) {
+      if (gRef.current) gRef.current.setAttribute("transform", "translate(" + ev.transform.x + "," + ev.transform.y + ") scale(" + ev.transform.k + ")");
+    });
+    zoomRef.current = zoom;
+    d3.select(svgRef.current).call(zoom);
+  }, []);
+
+  // ── Drag ─────────────────────────────────────────────────────────────────
+  var onPointerDown = useCallback(function(e, nodeId) {
+    e.stopPropagation();
+    var sim = simRef.current;
+    var node = nodes.find(function(n) { return n.id === nodeId; });
+    if (!sim || !node) return;
+    sim.alphaTarget(0.3).restart();
+    node.fx = node.x; node.fy = node.y;
+    var svgEl = svgRef.current;
+    var zt = d3.zoomTransform(svgEl);
+    var onMove = function(ev) {
+      var pt = svgEl.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+      var sp = pt.matrixTransform(svgEl.getScreenCTM().inverse());
+      node.fx = (sp.x - zt.x) / zt.k; node.fy = (sp.y - zt.y) / zt.k;
+    };
+    var onUp = function() { sim.alphaTarget(0); node.fx = null; node.fy = null; window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }, [nodes]);
+
+  var resetZoom = function() { if (svgRef.current && zoomRef.current) d3.select(svgRef.current).transition().duration(500).call(zoomRef.current.transform, d3.zoomIdentity); };
+
+  var selectedNode = nodes.find(function(n) { return n.id === selected; });
+
+  // ── Chat message handler ─────────────────────────────────────────────────
+  var handleSendMessage = function(question) {
+    // Add user message
+    var newMessages = chatMessages.slice();
+    newMessages.push({ role: "user", content: question, timestamp: Date.now() });
+    setChatMessages(newMessages);
+    setChatLoading(true);
+
+    if (provider === "local") {
+      // Use local query function
+      var response = queryGraph(question);
+      setTimeout(function() {
+        var updatedMessages = newMessages.slice();
+        updatedMessages.push({ role: "assistant", content: response, timestamp: Date.now() });
+        setChatMessages(updatedMessages);
+        setChatLoading(false);
+      }, 300);
+    } else if (provider === "claude") {
+      // Use Claude API
+      if (!apiKey.trim()) {
+        var errMsg = "Please enter your Anthropic API key in settings.";
+        var errMessages = newMessages.slice();
+        errMessages.push({ role: "assistant", content: errMsg, timestamp: Date.now() });
+        setChatMessages(errMessages);
+        setChatLoading(false);
+        return;
+      }
+
+      var systemPrompt = "You are a helpful assistant analyzing a software dependency graph. Here is the complete graph data as JSON:\n\nNODES:\n" + JSON.stringify(NODES, null, 2) + "\n\nLINKS:\n" + JSON.stringify(LINKS, null, 2) + "\n\nREPO:\n" + JSON.stringify(REPO, null, 2) + "\n\nAnswer questions about dependencies, modules, coordinates, and relationships. Be concise and helpful.";
+
+      fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "anthropic-dangerous-direct-browser-access": "true"
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1024,
+          system: systemPrompt,
+          messages: [{ role: "user", content: question }],
+          stream: false
+        })
+      })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        var assistantResponse = data.content && data.content.length > 0 ? data.content[0].text : "Error: No response from Claude.";
+        var updatedMessages = newMessages.slice();
+        updatedMessages.push({ role: "assistant", content: assistantResponse, timestamp: Date.now() });
+        setChatMessages(updatedMessages);
+        setChatLoading(false);
+      })
+      .catch(function(err) {
+        var errMsg = "Error calling Claude API: " + (err.message || "Unknown error");
+        var catchMessages = newMessages.slice();
+        catchMessages.push({ role: "assistant", content: errMsg, timestamp: Date.now() });
+        setChatMessages(catchMessages);
+        setChatLoading(false);
+      });
+    }
+  };
+
+  // ── Render helpers ───────────────────────────────────────────────────────
+  var renderLink = function(l, i) {
+    var src = typeof l.source === "object" ? l.source : nodes.find(function(n) { return n.id === l.source; });
+    var tgt = typeof l.target === "object" ? l.target : nodes.find(function(n) { return n.id === l.target; });
+    if (!src || !tgt || src.x == null || tgt.x == null) return null;
+    var st = linkStyle(l.type, dark);
+    var r = nodeRadius(tgt);
+    var dx = tgt.x - src.x, dy = tgt.y - src.y, dist = Math.sqrt(dx * dx + dy * dy) || 1;
+    var tx = tgt.x - (dx / dist) * (r + 6), ty = tgt.y - (dy / dist) * (r + 6);
+    var dimmed = hovered && (!connectedIds.has(sid(l)) || !connectedIds.has(tid(l)));
+    var mx = (src.x + tx) / 2, my = (src.y + ty) / 2;
+    return h("g", { key: "link-" + i, style: { transition: "opacity 0.2s" }, opacity: dimmed ? 0.12 : 1 },
+      h("line", { x1: src.x, y1: src.y, x2: tx, y2: ty, stroke: st.color, strokeWidth: st.width, strokeDasharray: st.dash, markerEnd: "url(#arrow-" + l.type + ")", opacity: 0.5 }),
+      showLabels ? h("text", { x: mx, y: my - 6, textAnchor: "middle", fontSize: 9, fill: t.labelEdge, fontWeight: 500 }, l.label) : null
+    );
+  };
+
+  var renderNode = function(n) {
+    if (!visibleIds.has(n.id) || n.x == null) return null;
+    var cfg = typeStyle(n.type, dark);
+    var r = nodeRadius(n);
+    var isSel = n.id === selected;
+    var isHov = n.id === hovered;
+    var dimmed = hovered && !connectedIds.has(n.id);
+    return h("g", {
+      key: n.id, transform: "translate(" + n.x + "," + n.y + ")",
+      style: { cursor: "grab", transition: "opacity 0.2s" }, opacity: dimmed ? 0.2 : 1,
+      onPointerDown: function(e) { onPointerDown(e, n.id); },
+      onClick: function() { setSelected(n.id === selected ? null : n.id); },
+      onMouseEnter: function() { setHovered(n.id); },
+      onMouseLeave: function() { setHovered(null); },
+    },
+      isSel ? h("circle", { r: r + 6, fill: "none", stroke: cfg.color, strokeWidth: 2, strokeDasharray: "4,3", opacity: 0.5 },
+        h("animateTransform", { attributeName: "transform", type: "rotate", from: "0", to: "360", dur: "8s", repeatCount: "indefinite" })
+      ) : null,
+      h("circle", { r: r, fill: isHov || isSel ? cfg.bg : t.nodeFill, stroke: cfg.color, strokeWidth: isSel ? 3 : 2, filter: isHov ? "url(#glow-strong)" : "url(#glow)" }),
+      h("text", { textAnchor: "middle", dominantBaseline: "central", fontSize: r * 0.7, style: { pointerEvents: "none" } }, cfg.icon),
+      h("text", { y: r + 16, textAnchor: "middle", fontSize: 12, fontWeight: 600, fill: cfg.color, style: { pointerEvents: "none" } }, n.artifactId),
+      h("text", { y: r + 28, textAnchor: "middle", fontSize: 10, fill: t.textMuted, style: { pointerEvents: "none", fontFamily: "monospace" } }, n.version),
+      n.scope ? h("g", { transform: "translate(" + (r * 0.7) + "," + (-r * 0.7) + ")" },
+        h("rect", { x: -16, y: -8, width: 32, height: 16, rx: 8, fill: SCOPE_COLORS[n.scope] || "#94a3b8" }),
+        h("text", { textAnchor: "middle", dominantBaseline: "central", fontSize: 8, fill: "white", fontWeight: 600, style: { pointerEvents: "none" } }, n.scope === "testRuntime" ? "tRT" : n.scope)
+      ) : null
+    );
+  };
+
+  var depRow = function(nodeData, link, i) {
+    var st = linkStyle(link.type, dark);
+    return h("div", {
+      key: i, onClick: function() { setSelected(nodeData.id); },
+      style: { padding: "8px 10px", borderRadius: 8, marginBottom: 4, cursor: "pointer", border: "1px solid " + t.depRowBorder, display: "flex", alignItems: "center", gap: 8, transition: "background 0.15s" },
+      onMouseEnter: function(e) { e.currentTarget.style.background = t.depRowHover; },
+      onMouseLeave: function(e) { e.currentTarget.style.background = "transparent"; },
+    },
+      h("div", { style: { width: 4, height: 24, borderRadius: 2, background: st.color, flexShrink: 0 } }),
+      h("div", null,
+        h("div", { style: { fontWeight: 600, fontSize: 12, color: t.depRowTitle } }, nodeData.artifactId),
+        h("div", { style: { fontSize: 10, color: t.depRowSub } }, link.label)
+      )
+    );
+  };
+
+  // ── Main layout ──────────────────────────────────────────────────────────
+  return h("div", { style: { display: "flex", flexDirection: "column", height: "100vh", background: t.pageBg, transition: "background 0.3s, color 0.3s" } },
+
+    // ═══ HEADER ═══
+    h("div", { style: { padding: "12px 24px", background: t.panelBg, borderBottom: "1px solid " + t.panelBorder, display: "flex", alignItems: "center", gap: 16, flexShrink: 0, transition: "background 0.3s" } },
+      h("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+        h("div", { style: { width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #6366f1, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 700, fontSize: 18 } }, "D"),
+        h("div", null,
+          h("div", { style: { fontWeight: 700, fontSize: 16, color: t.textPrimary } }, "Dependency Explorer"),
+          h("div", { style: { fontSize: 12, color: t.textMuted } }, "dep-multimodule \u00B7 com.example \u00B7 v1.0.0")
+        )
+      ),
+      h("div", { style: { flex: 1 } }),
+      // Type toggles
+      h("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
+        Object.keys(TYPE_COLORS).map(function(key) {
+          var cfg = typeStyle(key, dark);
+          var active = typeFilter[key];
+          return h("button", {
+            key: key, onClick: function() { setTypeFilter(function(p) { var o = Object.assign({}, p); o[key] = !o[key]; return o; }); },
+            style: { padding: "4px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer",
+              border: "1.5px solid " + (active ? cfg.color : t.filterInactiveBorder),
+              background: active ? cfg.bg : t.filterInactiveBg,
+              color: active ? cfg.color : t.filterInactiveText, transition: "all 0.15s" }
+          }, cfg.icon + " " + cfg.label);
+        }),
+        // Separator
+        h("div", { style: { width: 1, height: 24, background: t.panelBorder, margin: "0 4px" } }),
+        // Dark mode toggle
+        h(ThemeToggle, { dark: dark, onToggle: function() { setDark(function(d) { return !d; }); }, t: t })
+      )
+    ),
+
+    h("div", { style: { display: "flex", flex: 1, overflow: "hidden" } },
+
+      // ═══ SIDEBAR ═══
+      h("div", { style: { width: 280, background: t.panelBg, borderRight: "1px solid " + t.panelBorder, display: "flex", flexDirection: "column", flexShrink: 0, transition: "background 0.3s" } },
+
+        // Repository Info
+        h("div", { style: { padding: "14px 16px", borderBottom: "1px solid " + t.sectionBorder } },
+          h("div", { style: { fontWeight: 600, fontSize: 13, color: t.textSecondary, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" } }, "Repository"),
+          // Repo name + link
+          h("a", { href: REPO.url, target: "_blank", rel: "noopener noreferrer",
+            style: { display: "flex", alignItems: "center", gap: 8, textDecoration: "none", marginBottom: 10, padding: "8px 10px", borderRadius: 8, background: t.codeBg, border: "1px solid " + t.codeBorder, transition: "all 0.15s" }
+          },
+            // GitHub icon SVG
+            h("svg", { width: 20, height: 20, viewBox: "0 0 16 16", fill: t.textSecondary, style: { flexShrink: 0 } },
+              h("path", { d: "M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" })
+            ),
+            h("div", { style: { overflow: "hidden" } },
+              h("div", { style: { fontWeight: 600, fontSize: 13, color: dark ? "#818cf8" : "#6366f1", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, REPO.fullName),
+              h("div", { style: { fontSize: 10, color: t.textMuted, marginTop: 1 } }, REPO.visibility + " \u00B7 " + REPO.language)
+            )
+          ),
+          // Stats row
+          h("div", { style: { display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" } },
+            [
+              { icon: "\u2B50", val: REPO.stars, label: "Stars" },
+              { icon: "\u{1F500}", val: REPO.forks, label: "Forks" },
+              { icon: "\u{1F41B}", val: REPO.openIssues, label: "Issues" },
+              { icon: "\u{1F441}\uFE0F", val: REPO.watchers, label: "Watchers" },
+            ].map(function(s) {
+              return h("div", { key: s.label, title: s.label,
+                style: { display: "flex", alignItems: "center", gap: 3, padding: "3px 8px", borderRadius: 6, background: t.tagBg, fontSize: 11, color: t.tagText, fontWeight: 500 }
+              }, h("span", { style: { fontSize: 10 } }, s.icon), " " + s.val);
+            })
+          ),
+          // Metadata rows
+          h("div", { style: { fontSize: 11, lineHeight: 1.9, color: t.textMuted } },
+            h("div", null, h("span", { style: { color: t.textSecondary, fontWeight: 500 } }, "Branch: "), h("span", { style: { padding: "1px 6px", borderRadius: 4, background: dark ? "#1e3a5f" : "#dbeafe", color: dark ? "#60a5fa" : "#2563eb", fontSize: 10, fontWeight: 600, fontFamily: "monospace" } }, REPO.defaultBranch)),
+            h("div", null, h("span", { style: { color: t.textSecondary, fontWeight: 500 } }, "License: "), REPO.license),
+            h("div", null, h("span", { style: { color: t.textSecondary, fontWeight: 500 } }, "Size: "), REPO.size),
+            h("div", null, h("span", { style: { color: t.textSecondary, fontWeight: 500 } }, "Created: "), REPO.created),
+            h("div", null, h("span", { style: { color: t.textSecondary, fontWeight: 500 } }, "Last push: "), REPO.pushed)
+          ),
+          // Releases
+          h("div", { style: { marginTop: 8 } },
+            h("div", { style: { fontSize: 11, fontWeight: 600, color: t.textSecondary, marginBottom: 4 } }, "Releases"),
+            REPO.releases.length === 0
+              ? h("div", { style: { fontSize: 11, color: t.textMuted, fontStyle: "italic" } }, "No releases published")
+              : REPO.releases.map(function(r, i) {
+                  return h("div", { key: i, style: { fontSize: 11, color: t.textMuted } }, r);
+                })
+          ),
+          // Topics / Labels
+          h("div", { style: { marginTop: 8 } },
+            h("div", { style: { fontSize: 11, fontWeight: 600, color: t.textSecondary, marginBottom: 4 } }, "Labels / Topics"),
+            REPO.topics.length === 0
+              ? h("div", { style: { fontSize: 11, color: t.textMuted, fontStyle: "italic" } }, "No topics added")
+              : h("div", { style: { display: "flex", flexWrap: "wrap", gap: 4 } },
+                  REPO.topics.map(function(tp, i) {
+                    return h("span", { key: i, style: { padding: "2px 8px", borderRadius: 12, fontSize: 10, fontWeight: 500, background: dark ? "#1e3a5f" : "#dbeafe", color: dark ? "#60a5fa" : "#2563eb" } }, tp);
+                  })
+                )
+          )
+        ),
+
+        // GAV Filters
+        h("div", { style: { padding: 16, borderBottom: "1px solid " + t.sectionBorder } },
+          h("div", { style: { fontWeight: 600, fontSize: 13, color: t.textSecondary, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" } }, "GAV Filter"),
+          [{ key: "groupId", placeholder: "Group ID (e.g. com.example)", icon: "G" },
+           { key: "artifactId", placeholder: "Artifact ID (e.g. library)", icon: "A" },
+           { key: "version", placeholder: "Version (e.g. 1.0.0)", icon: "V" }].map(function(f) {
+            return h("div", { key: f.key, style: { display: "flex", alignItems: "center", marginBottom: 8, border: "1px solid " + t.inputBorder, borderRadius: 8, overflow: "hidden", transition: "border-color 0.15s" } },
+              h("div", { style: { width: 32, height: 36, display: "flex", alignItems: "center", justifyContent: "center", background: t.inputIconBg, color: dark ? "#818cf8" : "#6366f1", fontWeight: 700, fontSize: 12, borderRight: "1px solid " + t.inputBorder, flexShrink: 0 } }, f.icon),
+              h("input", { type: "text", placeholder: f.placeholder, value: filters[f.key],
+                onChange: function(e) { var v = e.target.value; setFilters(function(p) { var o = Object.assign({}, p); o[f.key] = v; return o; }); },
+                style: { flex: 1, padding: "8px 10px", border: "none", outline: "none", fontSize: 13, color: t.inputText, background: t.inputBg } })
+            );
+          }),
+          (filters.groupId || filters.artifactId || filters.version) ?
+            h("button", { onClick: function() { setFilters({ groupId: "", artifactId: "", version: "" }); },
+              style: { width: "100%", padding: "6px 0", borderRadius: 6, border: "1px solid " + t.btnBorder, background: t.btnBg, color: t.btnText, fontSize: 12, cursor: "pointer", fontWeight: 500, transition: "all 0.15s" }
+            }, "Clear filters") : null
+        ),
+
+        // Scope filter
+        h("div", { style: { padding: "12px 16px", borderBottom: "1px solid " + t.sectionBorder } },
+          h("div", { style: { fontWeight: 600, fontSize: 13, color: t.textSecondary, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" } }, "Scope"),
+          [{ key: "main", label: "Main", color: "#059669" },
+           { key: "test", label: "Test", color: "#8b5cf6" },
+           { key: "testRuntime", label: "Test Runtime", color: "#a78bfa" }].map(function(s) {
+            return h("label", { key: s.key, style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 6, cursor: "pointer", fontSize: 13 } },
+              h("input", { type: "checkbox", checked: scopeFilter[s.key], onChange: function() { setScopeFilter(function(p) { var o = Object.assign({}, p); o[s.key] = !o[s.key]; return o; }); }, style: { accentColor: s.color } }),
+              h("span", { style: { width: 8, height: 8, borderRadius: "50%", background: s.color, display: "inline-block" } }),
+              h("span", { style: { color: t.textSecondary } }, s.label)
+            );
+          })
+        ),
+
+        // Show labels
+        h("div", { style: { padding: "12px 16px", borderBottom: "1px solid " + t.sectionBorder } },
+          h("label", { style: { display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13 } },
+            h("input", { type: "checkbox", checked: showLabels, onChange: function() { setShowLabels(function(p) { return !p; }); }, style: { accentColor: dark ? "#818cf8" : "#6366f1" } }),
+            h("span", { style: { color: t.textSecondary } }, "Show edge labels")
+          )
+        ),
+
+        // Node list
+        h("div", { style: { flex: 1, overflowY: "auto", padding: "8px 0" } },
+          h("div", { style: { padding: "4px 16px 8px", fontWeight: 600, fontSize: 13, color: t.textSecondary, textTransform: "uppercase", letterSpacing: "0.05em" } },
+            "Modules (" + [...visibleIds].length + "/" + nodes.length + ")"
+          ),
+          nodes.map(function(n) {
+            var visible = visibleIds.has(n.id);
+            var cfg = typeStyle(n.type, dark);
+            return h("div", {
+              key: n.id,
+              onClick: function() { if (visible) setSelected(n.id === selected ? null : n.id); },
+              onMouseEnter: function() { if (visible) setHovered(n.id); },
+              onMouseLeave: function() { setHovered(null); },
+              style: { padding: "8px 16px", cursor: visible ? "pointer" : "default",
+                background: n.id === selected ? cfg.bg : "transparent", opacity: visible ? 1 : 0.35,
+                borderLeft: n.id === selected ? "3px solid " + cfg.color : "3px solid transparent", transition: "all 0.15s" }
+            },
+              h("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
+                h("span", { style: { fontSize: 14 } }, cfg.icon),
+                h("span", { style: { fontWeight: 600, fontSize: 13, color: cfg.color } }, n.artifactId),
+                n.scope ? h("span", { style: { fontSize: 10, padding: "1px 6px", borderRadius: 8, background: t.tagBg, color: t.tagText, fontWeight: 500 } }, n.scope) : null
+              ),
+              h("div", { style: { fontSize: 11, color: t.textMuted, marginTop: 2, fontFamily: "monospace" } }, n.groupId + ":" + n.version)
+            );
+          })
+        )
+      ),
+
+      // ═══ GRAPH AREA ═══
+      h("div", { style: { flex: 1, position: "relative", overflow: "hidden", background: t.graphBg, transition: "background 0.3s" } },
+        // Controls
+        h("div", { style: { position: "absolute", top: 12, right: 12, display: "flex", gap: 6, zIndex: 10 } },
+          h("button", { onClick: resetZoom, style: { padding: "6px 14px", borderRadius: 8, border: "1px solid " + t.btnBorder, background: t.btnBg, color: t.btnText, fontSize: 12, cursor: "pointer", fontWeight: 500, boxShadow: t.shadow, transition: "all 0.15s" } }, "Reset View")
+        ),
+        // Hint
+        h("div", { style: { position: "absolute", bottom: 12, left: 12, padding: "6px 12px", borderRadius: 8, background: t.hintBg, border: "1px solid " + t.panelBorder, fontSize: 11, color: t.textMuted, zIndex: 10 } },
+          "Drag nodes to reposition \u00B7 Scroll to zoom \u00B7 Click node for details"
+        ),
+        // Chat toggle button
+        h("button", {
+          onClick: function() { setChatOpen(!chatOpen); },
+          style: {
+            position: "absolute", bottom: 12, right: 12, width: 48, height: 48,
+            borderRadius: "50%", background: dark ? "#818cf8" : "#6366f1", border: "none",
+            color: "white", fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center",
+            justifyContent: "center", boxShadow: t.shadow, zIndex: 40, transition: "all 0.2s"
+          }
+        }, "\u{1F4AC}"),
+        // Chat panel
+        chatOpen ? h(ChatPanel, {
+          t: t, dark: dark, chatMessages: chatMessages, chatInput: chatInput,
+          setChatInput: setChatInput, onSendMessage: handleSendMessage, chatLoading: chatLoading,
+          chatSettings: chatSettings, setChatSettings: setChatSettings, apiKey: apiKey,
+          setApiKey: setApiKey, provider: provider, setProvider: setProvider
+        }) : null,
+        h("svg", { ref: svgRef, width: dims.width, height: dims.height, style: { width: "100%", height: "100%", cursor: "grab" } },
+          h("defs", null,
+            ["module", "implementation", "test", "platform"].map(function(key) {
+              var st = linkStyle(key, dark);
+              return h("marker", { key: key, id: "arrow-" + key, viewBox: "0 0 10 6", refX: "10", refY: "3", markerWidth: "10", markerHeight: "6", orient: "auto-start-reverse" },
+                h("path", { d: "M0,0 L10,3 L0,6 Z", fill: st.color, opacity: 0.6 })
+              );
+            }),
+            h("filter", { id: "glow" }, h("feDropShadow", { dx: "0", dy: "1", stdDeviation: "3", floodOpacity: t.glowOpacity })),
+            h("filter", { id: "glow-strong" }, h("feDropShadow", { dx: "0", dy: "2", stdDeviation: "5", floodOpacity: t.glowStrongOpacity }))
+          ),
+          h("g", { ref: gRef },
+            visibleLinks.map(renderLink),
+            nodes.map(renderNode)
+          )
+        )
+      ),
+
+      // ═══ DETAIL PANEL ═══
+      selectedNode ? h("div", { style: { width: 300, background: t.panelBg, borderLeft: "1px solid " + t.panelBorder, display: "flex", flexDirection: "column", flexShrink: 0, overflowY: "auto", transition: "background 0.3s" } },
+        h("div", { style: { padding: "16px 20px", borderBottom: "1px solid " + t.sectionBorder } },
+          h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+            h("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+              h("span", { style: { fontSize: 22 } }, typeStyle(selectedNode.type, dark).icon),
+              h("span", { style: { fontWeight: 700, fontSize: 16, color: typeStyle(selectedNode.type, dark).color } }, selectedNode.artifactId)
+            ),
+            h("button", { onClick: function() { setSelected(null); }, style: { background: "none", border: "none", cursor: "pointer", fontSize: 18, color: t.textMuted, lineHeight: 1 } }, "\u00D7")
+          ),
+          h("span", { style: { display: "inline-block", marginTop: 6, padding: "2px 10px", borderRadius: 12, fontSize: 11, fontWeight: 600,
+            background: typeStyle(selectedNode.type, dark).bg, color: typeStyle(selectedNode.type, dark).color,
+            border: "1px solid " + typeStyle(selectedNode.type, dark).border } }, typeStyle(selectedNode.type, dark).label)
+        ),
+        h("div", { style: { padding: "16px 20px" } },
+          // GAV
+          h("div", { style: { marginBottom: 16 } },
+            h("div", { style: { fontWeight: 600, fontSize: 12, color: t.textSecondary, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" } }, "Maven Coordinates"),
+            h("div", { style: { fontFamily: "monospace", fontSize: 12, background: t.codeBg, padding: 12, borderRadius: 8, border: "1px solid " + t.codeBorder, lineHeight: 1.8 } },
+              h("div", null, h("span", { style: { color: t.codeLabel } }, "groupId: "), h("span", { style: { color: t.codeValue, fontWeight: 600 } }, selectedNode.groupId)),
+              h("div", null, h("span", { style: { color: t.codeLabel } }, "artifactId: "), h("span", { style: { color: t.codeValue, fontWeight: 600 } }, selectedNode.artifactId)),
+              h("div", null, h("span", { style: { color: t.codeLabel } }, "version: "), h("span", { style: { color: t.codeValue, fontWeight: 600 } }, selectedNode.version)),
+              selectedNode.scope ? h("div", null, h("span", { style: { color: t.codeLabel } }, "scope: "), h("span", { style: { color: SCOPE_COLORS[selectedNode.scope], fontWeight: 600 } }, selectedNode.scope)) : null
+            )
+          ),
+          // Description
+          h("div", { style: { marginBottom: 16 } },
+            h("div", { style: { fontWeight: 600, fontSize: 12, color: t.textSecondary, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" } }, "Description"),
+            h("p", { style: { fontSize: 13, color: t.textSecondary, lineHeight: 1.6, margin: 0 } }, selectedNode.description)
+          ),
+          // Classes
+          selectedNode.classes ? h("div", { style: { marginBottom: 16 } },
+            h("div", { style: { fontWeight: 600, fontSize: 12, color: t.textSecondary, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" } }, "Classes"),
+            h("div", { style: { display: "flex", flexWrap: "wrap", gap: 4 } },
+              selectedNode.classes.map(function(c) { return h("span", { key: c, style: { padding: "3px 10px", borderRadius: 6, background: t.tagBg, fontSize: 12, color: t.depRowTitle, fontFamily: "monospace" } }, c); })
+            )
+          ) : null,
+          // Dependencies
+          h("div", { style: { marginBottom: 16 } },
+            h("div", { style: { fontWeight: 600, fontSize: 12, color: t.textSecondary, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" } },
+              "Dependencies (" + links.filter(function(l) { return sid(l) === selectedNode.id; }).length + ")"
+            ),
+            links.filter(function(l) { return sid(l) === selectedNode.id; }).map(function(l, i) {
+              var tNode = NODES.find(function(n) { return n.id === tid(l); });
+              return tNode ? depRow(tNode, l, i) : null;
+            }),
+            links.filter(function(l) { return sid(l) === selectedNode.id; }).length === 0 ?
+              h("div", { style: { fontSize: 12, color: t.textMuted, fontStyle: "italic" } }, "No outgoing dependencies") : null
+          ),
+          // Used by
+          h("div", null,
+            h("div", { style: { fontWeight: 600, fontSize: 12, color: t.textSecondary, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" } },
+              "Used By (" + links.filter(function(l) { return tid(l) === selectedNode.id; }).length + ")"
+            ),
+            links.filter(function(l) { return tid(l) === selectedNode.id; }).map(function(l, i) {
+              var sNode = NODES.find(function(n) { return n.id === sid(l); });
+              return sNode ? depRow(sNode, l, i) : null;
+            }),
+            links.filter(function(l) { return tid(l) === selectedNode.id; }).length === 0 ?
+              h("div", { style: { fontSize: 12, color: t.textMuted, fontStyle: "italic" } }, "No dependents") : null
+          )
+        )
+      ) : null
+    )
+  );
+}
+
+ReactDOM.render(h(DependencyExplorer), document.getElementById("root"));
+</script>
+</body>
+</html>
